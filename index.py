@@ -5,7 +5,7 @@ import pandas as pd
 import datetime
 import io
 import json
-import logging
+from  logging import Logger
 import random
 import boto3
 from PIL import Image
@@ -20,8 +20,6 @@ class ImageError(Exception):
 
 # Function to generate image, the foundational model that will be used is nova-canvas-v1:0
 def generate_image(model_id, body):
-    logger.info(
-        "Generating image with Amazon Nova Canvas  model", model_id)
 
     bedrock = boto3.client(
         service_name='bedrock-runtime',
@@ -45,33 +43,28 @@ def generate_image(model_id, body):
     if finish_reason is not None:
         raise ImageError(f"Image generation error. Error is {finish_reason}")
 
-    logger.info(
-        "Successfully generated image with Amazon Nova Canvas  model %s", model_id)
 
     return image_bytes
 
 
-def main():
+def handler(event, context):
     """
     Entrypoint for Amazon Nova Canvas  example.
     """
-    logging.basicConfig(level=logging.INFO,
-                        format="%(levelname)s: %(message)s")
     model_id = 'amazon.nova-canvas-v1:0'
     bucket = "tleetyson-anime-bucket"
     file_name = "anime-quotes.csv"
     s3 = boto3.client('s3') 
     s3_obj = s3.get_object(Bucket= bucket, 
                            Key= file_name) 
-    df = pd.read_csv(obj['Body'], 
-                     usecols=["Character", "Quote"])
+    content = s3_obj['Body'].read().decode('cp1252')
+    df = pd.read_csv(io.StringIO(content))
     max_rows = len(df)
     row_position = random.randint(0, max_rows)
-    selected_columns = df.columns
-    character_to_use = selected_columns["Character"]
-    quote_to_use = selected_columns["Quote"]
-    row_data = selected_columns.loc[row_position] 
-    prompt = f"Please generate colorful picture of {character_to_use} saying {quote_to_use}"
+    character_column = df.loc[row_position, 'Character']
+    quote_column = df.loc[row_position, 'Quote']
+    prompt = f"Generate a picture of {character_column} saying {quote_column}"
+    print(prompt)
 
     body = json.dumps({
         "taskType": "TEXT_IMAGE",
@@ -106,13 +99,9 @@ def main():
 
     except ClientError as err:
         message = err.response["Error"]["Message"]
-        logger.error("A client error occurred:", message)
         print("A client error occured: " +
               format(message))
     except ImageError as err:
-        logger.error(err.message)
         print(err.message)
-
     else:
-        print(
-            f"Finished generating image with Amazon Nova Canvas  model {model_id}.")
+        print(f"Finished generating image with Amazon Nova Canvas  model {model_id}.")
